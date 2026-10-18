@@ -9,6 +9,7 @@ import {
 } from "viem";
 import {
   amount,
+  describeDuration,
   UINT128_MAX,
   jobId,
   displayJob,
@@ -178,4 +179,15 @@ test("custom reverts and rejected signatures receive useful copy", () => {
   });
   assert.match(errorText(error), /required WEIR balance/);
   assert.match(errorText({ code: 4001 }), /declined/);
+});
+test("describeDuration rounds to the unit people say", () => {
+  assert.equal(describeDuration(30n), "under a minute");
+  assert.equal(describeDuration(3460n), "about 58 minutes");
+  assert.equal(describeDuration(5400n), "about 1.5 hours");
+  assert.equal(describeDuration(7200n), "about 2 hours");
+  assert.equal(describeDuration(86400n), "about 1 day");
+  assert.equal(describeDuration(86505n), "about 1 day");
+  assert.equal(describeDuration(3n * 86400n), "about 3 days");
+  assert.equal(describeDuration(14n * 86400n), "about 2 weeks");
+  assert.equal(describeDuration(100n * 86400n), "about 14 weeks");
 });

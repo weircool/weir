@@ -1410,3 +1410,11 @@ h1 { font-size: 2.1rem; }
 .terms-preview { margin: 8px 0 16px; padding: 14px 16px; border: 2px solid var(--color-text); background: var(--color-surface); }
 .terms-preview h3 { margin: 0 0 4px; }
 .terms-quote { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 0; padding: 10px 12px; background: var(--color-subtle); border-left: 4px solid var(--color-text); }
+
+/* Create: one payment vs ongoing, and the under-one-period deposit warning. */
+.mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-block-end: 20px; }
+.mode-toggle button { display: grid; gap: 4px; text-align: start; min-height: 0; min-width: 0; padding: 12px 14px; white-space: normal; }
+.mode-toggle button small { font-weight: 400; opacity: 0.8; }
+.mode-toggle button.selected { background: var(--px-yellow); }
+.field-warning { color: var(--px-brick); display: block; font-size: var(--text-small); }
+@media (max-width: 640px) { .mode-toggle { grid-template-columns: 1fr; } }

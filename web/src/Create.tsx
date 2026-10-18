@@ -15,6 +15,7 @@ import {
   address,
   amount,
   byteLength,
+  describeDuration,
   errorText,
   jobId,
   tryAmount,
@@ -108,6 +109,8 @@ const WETH_ABI = [
 const TERMS_LIMIT = 512;
 const PERIODS = { day: 86400n, week: 604800n } as const;
 type Period = keyof typeof PERIODS;
+/** "One payment" streams a fixed total over a span; "ongoing" sets a rate and a first deposit. */
+type Mode = "once" | "ongoing";
 
 type Draft = {
   recipient: Address;
@@ -117,9 +120,16 @@ type Draft = {
   hash: Hex;
   uri: string;
   job: Hex;
+  mode: Mode;
+  /** Ongoing: the amount per period. One payment: the total. */
   perPeriod: bigint;
   period: Period;
+  /** One payment: how many periods the total is spread over. */
+  spanCount: number;
 };
+
+/** Whole seconds the deposit lasts at this rate. */
+const lasts = (deposit: bigint, rate: bigint) => (rate > 0n ? deposit / rate : 0n);
 
 export function Create() {
   const r = useRuntime();
@@ -130,8 +140,10 @@ export function Create() {
   const [choice, setChoice] = useState<string>(named[0]?.address ?? "");
   const [custom, setCustom] = useState("");
   const [customOpen, setCustomOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("once");
   const [perPeriod, setPerPeriod] = useState("");
   const [period, setPeriod] = useState<Period>("day");
+  const [spanCount, setSpanCount] = useState("1");
   const [deposit, setDeposit] = useState("");
   const [terms, setTerms] = useState("");
   const [link, setLink] = useState("");
@@ -156,14 +168,33 @@ export function Create() {
   const perAmount = token.data
     ? tryAmount(perPeriod, token.data.decimals, UINT128_MAX)
     : undefined;
-  const rate = perAmount !== undefined ? perAmount / PERIODS[period] : undefined;
+  const span = /^\d+$/.test(spanCount.trim()) ? Number(spanCount.trim()) : 0;
+  const spanSeconds = PERIODS[period] * BigInt(span);
+  // One payment: rate = total / span. Ongoing: rate = amount / period.
+  const rate =
+    perAmount === undefined
+      ? undefined
+      : mode === "once"
+        ? span > 0
+          ? perAmount / spanSeconds
+          : undefined
+        : perAmount / PERIODS[period];
   const depositAmount = token.data
-    ? tryAmount(deposit, token.data.decimals, UINT128_MAX)
+    ? mode === "once"
+      ? perAmount
+      : tryAmount(deposit, token.data.decimals, UINT128_MAX)
     : undefined;
-  const coverage =
-    perAmount && depositAmount && perAmount > 0n
-      ? Number((depositAmount * 10n) / perAmount) / 10
+  const runtime =
+    rate && depositAmount !== undefined && rate > 0n
+      ? lasts(depositAmount, rate)
       : undefined;
+  // Ongoing only: a first deposit that does not even cover one period is nearly always a slip.
+  const shortDeposit =
+    mode === "ongoing" &&
+    runtime !== undefined &&
+    depositAmount !== undefined &&
+    depositAmount > 0n &&
+    runtime < PERIODS[period];
 
   function review() {
     setInvalid(undefined);
@@ -197,15 +228,20 @@ export function Create() {
       const per = checked("perPeriod", () =>
         amount(perPeriod, token.data!.decimals, UINT128_MAX),
       );
-      const rateValue = per / PERIODS[period];
+      if (mode === "once" && span === 0)
+        fail("spanCount", "Say how many days or weeks the payment is spread over.");
+      const rateValue = mode === "once" ? per / spanSeconds : per / PERIODS[period];
       if (rateValue === 0n)
         fail(
           "perPeriod",
-          `That is less than the smallest unit of ${symbol} per second. Raise the amount.`,
+          `That is less than the smallest unit of ${symbol} per second. Raise the amount${mode === "once" ? " or shorten the time" : ""}.`,
         );
-      const depositValue = checked("deposit", () =>
-        amount(deposit, token.data!.decimals, UINT128_MAX),
-      );
+      const depositValue =
+        mode === "once"
+          ? per
+          : checked("deposit", () =>
+              amount(deposit, token.data!.decimals, UINT128_MAX),
+            );
       if (!terms.trim())
         fail("terms", "Say what is being delivered and by when.");
       if (termsBytes > TERMS_LIMIT)
@@ -225,8 +261,10 @@ export function Create() {
         hash: keccak256(toBytes(onChain)),
         uri: onChain,
         job: checked("imdJobId", () => jobId(job)),
+        mode,
         perPeriod: per,
         period,
+        spanCount: span,
       });
       setError("");
       window.scrollTo(0, 0);
@@ -261,29 +299,52 @@ export function Create() {
                 <AddressView value={draft.recipient} full />
               </dd>
             </div>
-            <div>
-              <dt>How much</dt>
-              <dd>
-                {units(draft.perPeriod, token.data.decimals)} {token.data.symbol}{" "}
-                per {draft.period}
-                <small className="muted">
-                  {units(draft.rate, token.data.decimals)} {token.data.symbol}{" "}
-                  every second, rounded down to the smallest unit
-                </small>
-              </dd>
-            </div>
-            <div>
-              <dt>Starting with</dt>
-              <dd>
-                {units(draft.deposit, token.data.decimals)} {token.data.symbol}
-                {coverage !== undefined && (
+            {draft.mode === "once" ? (
+              <div>
+                <dt>Paying</dt>
+                <dd>
+                  {units(draft.deposit, token.data.decimals)} {token.data.symbol} in
+                  total, streamed over {draft.spanCount} {draft.period}
+                  {draft.spanCount === 1 ? "" : "s"}
                   <small className="muted">
-                    about {coverage} {draft.period}
-                    {coverage === 1 ? "" : "s"} of streaming
+                    {units(draft.rate, token.data.decimals)} {token.data.symbol}{" "}
+                    every second, rounded down to the smallest unit. The whole amount
+                    leaves your wallet now and is fully paid out in{" "}
+                    {describeDuration(lasts(draft.deposit, draft.rate))}.
                   </small>
-                )}
-              </dd>
-            </div>
+                </dd>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <dt>Rate</dt>
+                  <dd>
+                    {units(draft.perPeriod, token.data.decimals)} {token.data.symbol}{" "}
+                    per {draft.period}
+                    <small className="muted">
+                      {units(draft.rate, token.data.decimals)} {token.data.symbol}{" "}
+                      every second, rounded down to the smallest unit
+                    </small>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Deposit now</dt>
+                  <dd>
+                    {units(draft.deposit, token.data.decimals)} {token.data.symbol}
+                    <small
+                      className={
+                        lasts(draft.deposit, draft.rate) < PERIODS[draft.period]
+                          ? "field-warning"
+                          : "muted"
+                      }
+                    >
+                      Lasts {describeDuration(lasts(draft.deposit, draft.rate))} at this
+                      rate. Top up on the stream page to keep it running.
+                    </small>
+                  </dd>
+                </div>
+              </>
+            )}
             <div>
               <dt>Terms</dt>
               <dd className="terms-preview">{draft.uri}</dd>
@@ -420,56 +481,137 @@ export function Create() {
                 starts, and the recipient can unwrap it back to ETH any time.
               </small>
             )}
-            <Field
-              error={fieldError("perPeriod")}
-              label={`How much${symbol ? ` (${symbol})` : ""}`}
-              hint={
-                rate !== undefined && token.data
-                  ? `${units(rate, token.data.decimals)} ${symbol} every second.`
-                  : "The amount they earn each day or each week while the stream runs."
-              }
-            >
-              <div className="amount-row">
-                <input
-                  name="perPeriod"
-                  inputMode="decimal"
-                  value={perPeriod}
-                  onChange={(e) => setPerPeriod(e.target.value)}
-                  placeholder="500"
-                />
-                <div className="period-toggle" role="radiogroup" aria-label="Per">
-                  {(["day", "week"] as Period[]).map((p) => (
-                    <button
-                      type="button"
-                      key={p}
-                      role="radio"
-                      aria-checked={period === p}
-                      className={period === p ? "selected" : ""}
-                      onClick={() => setPeriod(p)}
-                    >
-                      per {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </Field>
-            <Field
-              error={fieldError("deposit")}
-              label={`Start with${symbol ? ` (${symbol})` : ""}`}
-              hint={
-                coverage !== undefined
-                  ? `Covers about ${coverage} ${period}${coverage === 1 ? "" : "s"}. You can add more later, and anything unstreamed comes back if you stop.`
-                  : "Your first deposit. You can top up later; whatever has not streamed comes back if you stop."
-              }
-            >
-              <input
-                name="deposit"
-                inputMode="decimal"
-                value={deposit}
-                onChange={(e) => setDeposit(e.target.value)}
-                placeholder="1000"
-              />
-            </Field>
+            <div className="mode-toggle" role="radiogroup" aria-label="Kind of payment">
+              {(
+                [
+                  ["once", "One payment", "A fixed amount, paid out over a set time."],
+                  ["ongoing", "Ongoing", "A rate per day or week. Top up as you go."],
+                ] as [Mode, string, string][]
+              ).map(([m, title, note]) => (
+                <button
+                  type="button"
+                  key={m}
+                  role="radio"
+                  aria-checked={mode === m}
+                  className={mode === m ? "selected" : ""}
+                  onClick={() => setMode(m)}
+                >
+                  <strong>{title}</strong>
+                  <small>{note}</small>
+                </button>
+              ))}
+            </div>
+            {mode === "once" ? (
+              <>
+                <Field
+                  error={fieldError("perPeriod")}
+                  label={`Total${symbol ? ` (${symbol})` : ""}`}
+                  hint="Leaves your wallet when you create the stream. They earn it second by second; anything not yet earned comes back if you stop."
+                >
+                  <input
+                    name="perPeriod"
+                    inputMode="decimal"
+                    value={perPeriod}
+                    onChange={(e) => setPerPeriod(e.target.value)}
+                    placeholder="25"
+                  />
+                </Field>
+                <Field
+                  error={fieldError("spanCount")}
+                  label="Over"
+                  hint={
+                    rate !== undefined && rate > 0n && token.data && runtime !== undefined
+                      ? `${units(rate, token.data.decimals)} ${symbol} every second. Fully paid in ${describeDuration(runtime)}.`
+                      : "How long the payment is spread over."
+                  }
+                >
+                  <div className="amount-row">
+                    <input
+                      name="spanCount"
+                      inputMode="numeric"
+                      value={spanCount}
+                      onChange={(e) => setSpanCount(e.target.value)}
+                      placeholder="1"
+                    />
+                    <div className="period-toggle" role="radiogroup" aria-label="Unit">
+                      {(["day", "week"] as Period[]).map((p) => (
+                        <button
+                          type="button"
+                          key={p}
+                          role="radio"
+                          aria-checked={period === p}
+                          className={period === p ? "selected" : ""}
+                          onClick={() => setPeriod(p)}
+                        >
+                          {p}
+                          {span === 1 ? "" : "s"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </Field>
+              </>
+            ) : (
+              <>
+                <Field
+                  error={fieldError("perPeriod")}
+                  label={`Rate${symbol ? ` (${symbol})` : ""}`}
+                  hint={
+                    rate !== undefined && token.data
+                      ? `${units(rate, token.data.decimals)} ${symbol} every second.`
+                      : "What they earn each day or each week while the stream runs."
+                  }
+                >
+                  <div className="amount-row">
+                    <input
+                      name="perPeriod"
+                      inputMode="decimal"
+                      value={perPeriod}
+                      onChange={(e) => setPerPeriod(e.target.value)}
+                      placeholder="500"
+                    />
+                    <div className="period-toggle" role="radiogroup" aria-label="Per">
+                      {(["day", "week"] as Period[]).map((p) => (
+                        <button
+                          type="button"
+                          key={p}
+                          role="radio"
+                          aria-checked={period === p}
+                          className={period === p ? "selected" : ""}
+                          onClick={() => setPeriod(p)}
+                        >
+                          per {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </Field>
+                <Field
+                  error={fieldError("deposit")}
+                  label={`Deposit now${symbol ? ` (${symbol})` : ""}`}
+                  hint={
+                    shortDeposit && runtime !== undefined && perAmount ? (
+                      <span className="field-warning">
+                        Lasts only {describeDuration(runtime)} at this rate. For a full{" "}
+                        {period}, deposit {units(perAmount, token.data!.decimals)} {symbol}.
+                      </span>
+                    ) : runtime !== undefined && runtime > 0n ? (
+                      `Lasts ${describeDuration(runtime)} at this rate. The stream stops when it runs out; top up any time, and anything unstreamed comes back if you stop.`
+                    ) : (
+                      "The whole stream runs from this pot. It stops when the pot is empty; top up any time, and anything unstreamed comes back if you stop."
+                    )
+                  }
+                >
+                  <input
+                    name="deposit"
+                    inputMode="decimal"
+                    value={deposit}
+                    onChange={(e) => setDeposit(e.target.value)}
+                    placeholder={perPeriod.trim() || "500"}
+                  />
+                </Field>
+              </>
+            )}
           </div>
           <div className="form-surface">
             <h2>What for</h2>

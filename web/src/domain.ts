@@ -224,3 +224,23 @@ export function errorText(error: unknown): string {
     "The action could not finish. Refresh and try again."
   );
 }
+
+/** Rounds a span of seconds to the unit people say out loud: "about 58 minutes", "about 1 day". */
+export function describeDuration(seconds: bigint): string {
+  const s = Number(seconds);
+  if (s < 60) return "under a minute";
+  const steps: [number, string][] = [
+    [604800, "week"],
+    [86400, "day"],
+    [3600, "hour"],
+    [60, "minute"],
+  ];
+  for (const [size, name] of steps) {
+    if (s >= size) {
+      const n = Math.round((s / size) * 10) / 10;
+      const shown = n >= 10 ? Math.round(n) : n;
+      return `about ${shown} ${name}${shown === 1 ? "" : "s"}`;
+    }
+  }
+  return "under a minute";
+}
