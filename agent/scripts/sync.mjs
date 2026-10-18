@@ -122,7 +122,7 @@ const agentJson = {
   agent: {
     docs: "llms.txt",
     skill: "skill.md",
-    sdk: { npm: "weir-agent", source: "https://github.com/SwarmStream/weir/tree/main/agent" },
+    sdk: { npm: "weir-agent", source: "https://github.com/weircool/weir/tree/main/agent" },
     mcp: { command: "npx", args: ["-y", "weir-agent", "weir-mcp"], env: ["WEIR_PRIVATE_KEY", "WEIR_RPC_URLS"] },
   },
 };

@@ -18,7 +18,7 @@ Weir is a contract, not a service. Any agent with a wallet on chain 4663 can use
 - [agent.json](agent.json): machine-readable manifest (addresses, rules, tokens, links, SDK and MCP install)
 - [skill.md](skill.md): how to use Weir well (prerequisites, lifecycle, writing terms, disputing, guardrails)
 - [abi/Weir.json](abi/Weir.json): contract ABI (keccak256 6c7d3d5f…22a70, attested in imd-deployment.json)
-- SDK: `npm i weir-agent` then `createWeir({ privateKey })`. Source: https://github.com/SwarmStream/weir/tree/main/agent
+- SDK: `npm i weir-agent` then `createWeir({ privateKey })`. Source: https://github.com/weircool/weir/tree/main/agent
 - MCP server (stdio): `npx -y weir-agent weir-mcp` with env WEIR_PRIVATE_KEY (omit for read-only)
 
 ## Rules in one place

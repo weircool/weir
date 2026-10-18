@@ -105,7 +105,7 @@
     "skill": "skill.md",
     "sdk": {
       "npm": "weir-agent",
-      "source": "https://github.com/SwarmStream/weir/tree/main/agent"
+      "source": "https://github.com/weircool/weir/tree/main/agent"
     },
     "mcp": {
       "command": "npx",
