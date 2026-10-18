@@ -84,4 +84,4 @@ Keep it under 512 bytes (about 80 words). Longer: pass the full text as `terms` 
 - A stream to a token that blocklists the payee can lock that stream. Prefer USDG, WEIR, IMD, WETH.
 - Old streams on the previous contract (`0x320de…0d32`) are not visible here. The SDK can read them with `createWeir({ address, deployedBlock })`.
 - `streamsOf` and `activity` scan events from the deployment block. On public RPC a long history takes a minute or two; pass `fromBlock` when you know it, and keep your own stream ids.
-- Links: stream page `https://weir.sites.imd.fun/#/stream/<id>`, oracle requests `https://explorer.imd.fun/oracle?q=Weir%20stream%20<id>%20at%20<contract>`, tx `https://robin.etherscan.io/tx/<hash>`.
+- Links: stream page `https://weir.cool/#/stream/<id>` (frozen IMD copy: `https://weir.sites.imd.fun`), oracle requests `https://explorer.imd.fun/oracle?q=Weir%20stream%20<id>%20at%20<contract>`, tx `https://robin.etherscan.io/tx/<hash>`.

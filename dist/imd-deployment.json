@@ -83,19 +83,19 @@
     },
     {
       "path": "agent.json",
-      "sha256": "4716823b72dd378180a233b2ffb47a90bca79ce28dc98a8089ddea60fa75bb25"
+      "sha256": "e6c8f09f6fbc7d03702f2dfc9c62f11f0f3d996e8a781c5b5fbee75f06b96a85"
     },
     {
-      "path": "assets/ccip-KBLCzf9H.js",
-      "sha256": "0aae0da49623a258611415880e5e1c587729526c85487cf6c0a39d8e0845ad81"
+      "path": "assets/ccip-BoLFT-Ad.js",
+      "sha256": "86882218842958e87b1832b2ce862bf9ad028ae0e36f69fa823b98d2a46a51a6"
     },
     {
-      "path": "assets/dist-CRTjTA72.js",
-      "sha256": "467013df9fce1929b91c7a81c7f07103ee869ef389531755a3741f2963f13446"
+      "path": "assets/dist-oGIN0Z3u.js",
+      "sha256": "cc836c22565c5106202e2abeca7e7d1648664ae445a96ed3343ff5fad6e12c87"
     },
     {
-      "path": "assets/index-BzhvUcVM.js",
-      "sha256": "03a32716fe3c7cf40d1cbcffff904b7794e51ba385e07a8445758c0241828a1d"
+      "path": "assets/index-C4gi_Hcu.js",
+      "sha256": "aa4e551beb1e973d9213e53aea35f655f3abf71759b043432067864d0d0129e0"
     },
     {
       "path": "assets/index-CmRZ2XX_.css",
@@ -211,11 +211,11 @@
     },
     {
       "path": "index.html",
-      "sha256": "3661b269127ff0930e1e313be4082204bf3b54165baa149b948e9b8621939da3"
+      "sha256": "2866059dab93e617fc236fce70fe6d49e8c689499a86b3a1abdf7333dc8d36e6"
     },
     {
       "path": "llms.txt",
-      "sha256": "6a8f62313e0cac26397ac775c6d09a2ebc19514fedecbd9d7839b7d19821ede7"
+      "sha256": "901a97c26d10c55464ab05a65653a07d83e710368778b337f52a97a7ce941cc5"
     },
     {
       "path": "share.png",
@@ -223,7 +223,7 @@
     },
     {
       "path": "skill.md",
-      "sha256": "ab417f51b08151ab36ee914008fdef332fed0005e0e74d41e30cc4c66755325b"
+      "sha256": "68e7671a110190ebec94242f1b9c7c397b30179498f866d737479291d7a73d37"
     },
     {
       "path": "third-party-licenses.txt",

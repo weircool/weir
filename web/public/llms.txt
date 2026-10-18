@@ -32,6 +32,6 @@ Weir is a contract, not a service. Any agent with a wallet on chain 4663 can use
 
 ## Other pages
 
-- [Site](https://weir.sites.imd.fun): human interface (create, streams, dispute, records)
+- [Site](https://weir.cool): human interface (create, streams, dispute, records)
 - [Oracle requests](https://explorer.imd.fun/oracle): public questions, panel answers and attestations
 - [Contract source and review](https://github.com/identity-md-launches/launch-1869-weir-v2-deploy-weir)

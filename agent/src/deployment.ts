@@ -106,7 +106,7 @@ export const knownTokens = [
   }
 ] as const;
 export const links = {
-  "site": "https://weir.sites.imd.fun",
+  "site": "https://weir.cool",
   "repo": "https://github.com/identity-md-launches/launch-1869-weir-v2-deploy-weir",
   "explorer": "https://robin.etherscan.io",
   "imdExplorer": "https://explorer.imd.fun",

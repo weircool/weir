@@ -62,7 +62,7 @@ const knownTokens = [
   { symbol: "WETH", address: "0x0bd7d308f8e1639fab988df18a8011f41eacad73", decimals: 18, note: "ETH wrapped; unwrap with withdraw()" },
 ];
 const links = {
-  site: "https://weir.sites.imd.fun",
+  site: "https://weir.cool",
   repo: "https://github.com/identity-md-launches/launch-1869-weir-v2-deploy-weir",
   explorer: deployment.network.explorer,
   imdExplorer: "https://explorer.imd.fun",

@@ -26,7 +26,7 @@ Escrow with a clock and a jury, and no company in the middle. The contract (`Wei
 - Wallets: Rabby, MetaMask, other injected wallets, Coinbase Wallet. The site switches or adds the chain. Gas is ETH on Robinhood Chain.
 - Disputes pay the IdentityMD Intake in IMD (0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127 on 4663); the live price is read per dispute. A permissionless court fund of IMD pays first when it holds enough; otherwise the disputer pays.
 - The oracle request, panel answers and signed attestation are public on explorer.imd.fun / api.imd.fun; a dispute resolved in about five minutes in the first live test (2026-10-15, stream 1).
-- The site is a static Vite + React + wagmi export that reads `imd-deployment.json` and the ABI JSON files at runtime and verifies their hashes. IMD hosts a frozen, attested copy at weir.sites.imd.fun; this repository's build is hosted separately under the project's own domain.
+- The site is a static Vite + React + wagmi export that reads `imd-deployment.json` and the ABI JSON files at runtime and verifies their hashes. IMD hosts a frozen, attested copy at weir.sites.imd.fun; this repository's build is served from https://weir.cool (apex is canonical; www redirects to it, decided 2026-10-16).
 - Streams are per-second; the contract stores a rate per second. People think in amounts per day or per week; the UI converts.
 
 ## Capabilities and Constraints
@@ -40,7 +40,7 @@ Escrow with a clock and a jury, and no company in the middle. The contract (`Wei
 - Vocabulary for users: terms, reviewers, deposit, per day, settle, paused, closed. Keep the exact words `hash`, `URI`, `oracle`, `attestation`, `bps`, `tier`, `rate per second`, `enforce` out of primary copy; they may appear inside a "Details" disclosure for the secondary audience.
 - Token picker (owner, 2026-10-15): Create offers a short list of named tokens instead of a raw address field: **USDG** (0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168, 6 decimals, the chain's dollar), **WEIR** (0x58b82fa656ecf47a0dca5be6bad06b92e22f7dbe), **IMD** (0x5f7bb59365ce557c26dbcaa4ee9d39a4b95b7127), plus **ETH** streamed as WETH (0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73; the site wraps for the client in one step, the recipient can unwrap any time) and "another token" by address one disclosure away. Symbol and decimals are still read from the contract. Verified by simulation on 2026-10-15: WETH `deposit` then `withdraw` returns the ETH to the sender on Robinhood Chain (an older note claiming `withdraw()` burns there was wrong for this path).
 - Terms live on the site (owner, 2026-10-15): the user writes the terms in one box on Create; the text itself is stored on-chain as `termsURI` (≤ 512 UTF-8 bytes, about 80 words) and `termsHash` is computed silently. Every stream page shows the terms read back from the chain, so "posting" them is automatic and nothing external is needed. Longer terms: the box counts down and offers an optional link field for the full document; the on-chain text then carries the summary plus that link.
-- Undecided: the production domain for this build; copy for the "Records" page beyond win/loss counts.
+- Undecided: copy for the "Records" page beyond win/loss counts.
 
 ## Brand Commitments
 
