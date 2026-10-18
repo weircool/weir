@@ -58,7 +58,11 @@ export function Eligibility({ compact = false }: { compact?: boolean }) {
           </>
         )}
       </div>
-      {!compact && (
+      {compact ? (
+        <External href={LINKS.token(r.token.address)} className="button">
+          Buy WEIR
+        </External>
+      ) : (
         <a href="#/create" className="button primary">
           Start a stream <span aria-hidden="true">↗</span>
         </a>
