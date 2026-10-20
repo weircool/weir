@@ -1420,9 +1420,10 @@ h1 { font-size: 2.1rem; }
 @media (max-width: 640px) { .mode-toggle { grid-template-columns: 1fr; } }
 
 /* Create: hold-until-accept option and the post-create hold step. */
-.hold-option { display: flex; gap: 12px; align-items: flex-start; margin-block-start: 4px; }
-.hold-option input { margin-block-start: 4px; flex: none; }
-.hold-option span { display: grid; gap: 4px; }
+.hold-option { display: flex; gap: 12px; align-items: flex-start; margin-block: 20px 0; font-size: var(--text-small); cursor: pointer; }
+.hold-option input[type="checkbox"] { width: 18px; height: 18px; margin: 3px 0 0; padding: 0; flex: none; accent-color: var(--px-ink); }
+.hold-option > span { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.hold-option strong { font-weight: 600; }
 .hold-step { display: grid; gap: 12px; }
 .hold-step h3 { margin: 0; }
 .hold-step p { margin: 0; }
