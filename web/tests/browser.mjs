@@ -621,6 +621,95 @@ await scenario(
     ).toBe("0s");
   },
 );
+async function fillCreate(page) {
+  await page.getByLabel("Who are you paying?").fill(RECIPIENT);
+  await page.getByLabel(/^Total/).fill("25");
+  await page
+    .getByLabel("What are they delivering, by when?")
+    .fill("Deliver the agreed work by Friday.");
+}
+async function approveAndCreate(page) {
+  await page.getByRole("button", { name: "Approve USDC", exact: true }).click();
+  await page.getByRole("button", { name: "Create stream", exact: true }).click();
+}
+await scenario(
+  "Hold: on by default, create then pause, client starts once accepted",
+  async (page, state) => {
+    await open(page, "/create");
+    await connect(page);
+    await fillCreate(page);
+    await expect(page.getByLabel("Hold until they accept")).toBeChecked();
+    await page.getByRole("button", { name: "Check it over", exact: true }).click();
+    await expect(page.locator(".review-surface")).toContainText(
+      "When they accept and you start it",
+    );
+    await expect(page.locator(".review-surface")).toContainText("Three wallet steps");
+    await approveAndCreate(page);
+    await expect(
+      page.getByRole("heading", { name: "Stream created and on hold" }),
+    ).toBeVisible();
+    expect(state.transactions.slice(-2).map((t) => t.fn)).toEqual([
+      "createStream",
+      "pause",
+    ]);
+    expect(state.transactions.at(-1).args[0]).toBe(4n);
+    const s = state.streams.get(4n);
+    expect(s.rate).toBe(0n);
+    expect(s.pausedRate > 0n).toBe(true);
+    await page.getByRole("link", { name: "Open stream #4" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Stream #4", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".badge")).toHaveText("Paused");
+    await expect(
+      page.getByText("On hold. Nothing streams until you start it."),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Start streaming", exact: true }),
+    ).toHaveCount(0);
+    // The recipient accepts (simulated on the mock chain); the client refreshes and starts.
+    state.accepted.set(4n, 1n);
+    await page.getByRole("button", { name: "Refresh now", exact: true }).click();
+    await expect(page.getByText("The recipient accepted the terms")).toBeVisible();
+    await action(page, "Start streaming");
+    expect(state.transactions.at(-1).fn).toBe("restart");
+    expect(state.transactions.at(-1).args).toEqual([4n, s.pausedRate]);
+    await expect(page.locator(".badge")).toHaveText("Active");
+  },
+);
+await scenario(
+  "Hold: the recipient of a held stream is told to accept",
+  async (page, state) => {
+    const s = state.streams.get(1n);
+    s.pausedRate = s.rate;
+    s.rate = 0n;
+    state.account = RECIPIENT;
+    await open(page, "/stream/1");
+    await connect(page);
+    await expect(
+      page.getByText("The client is holding this stream until you accept the terms."),
+    ).toBeVisible();
+    await action(page, "Accept terms", true);
+    await expect(page.getByText("The client is holding this stream")).toHaveCount(0);
+  },
+);
+await scenario(
+  "Hold: switched off, create goes straight to the stream with no pause",
+  async (page, state) => {
+    await open(page, "/create");
+    await connect(page);
+    await fillCreate(page);
+    await page.getByLabel("Hold until they accept").uncheck();
+    await page.getByRole("button", { name: "Check it over", exact: true }).click();
+    await expect(page.locator(".review-surface")).toContainText("Right away");
+    await approveAndCreate(page);
+    await expect(
+      page.getByRole("heading", { name: "Stream #4", exact: true }),
+    ).toBeVisible();
+    expect(state.transactions.map((t) => t.fn)).not.toContain("pause");
+    await expect(page.locator(".badge")).toHaveText("Active");
+  },
+);
 await browser.close();
 await new Promise((r) => server.close(r));
 const evidence = {

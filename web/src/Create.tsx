@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import {
   decodeEventLog,
@@ -9,7 +9,14 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { useBalance, useRead, useReady, useRuntime, useToken } from "./data";
+import {
+  useBalance,
+  useRead,
+  useReady,
+  useRuntime,
+  useToken,
+  useTransaction,
+} from "./data";
 import { useWalletClient } from "wagmi";
 import {
   address,
@@ -24,7 +31,7 @@ import {
 } from "./domain";
 import { ApprovalAction } from "./actions";
 import { Eligibility } from "./Home";
-import { AddressView, Field, Notice, QueryState, Title } from "./ui";
+import { AddressView, Field, Notice, QueryState, Title, TxButton, TxFeedback } from "./ui";
 import { ConnectPrompt } from "./Wallet";
 
 /** Wrap ETH into WETH so it can be streamed; the recipient can unwrap it any time. */
@@ -73,6 +80,62 @@ function WrapEth({ needed, decimals }: { needed: bigint; decimals: number }) {
         {state === "signing" ? "Confirm in your wallet…" : state === "pending" ? "Wrapping…" : `Wrap ${units(missing, decimals)} ETH`}
       </button>
       {message && <p className="field-error">{message}</p>}
+    </div>
+  );
+}
+
+/**
+ * Pauses a freshly created stream so nothing streams until the recipient accepts the terms and the
+ * client starts it. The contract has no "create paused", so this is a second transaction right after
+ * create; the few seconds in between stream at the full rate (fractions of a cent at normal rates).
+ */
+function HoldStep({ id }: { id: bigint }) {
+  const tx = useTransaction();
+  const [done, setDone] = useState(false);
+  const run = async () => {
+    const receipt = await tx.run("pause", [id]);
+    if (receipt) setDone(true);
+  };
+  useEffect(() => {
+    void run();
+    // Run once, when the created stream id is known.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  const href = `#/stream/${id.toString()}`;
+  return (
+    <div className="hold-step" role="status">
+      <h3>{done ? "Stream created and on hold" : "Stream created. Holding it…"}</h3>
+      {done ? (
+        <>
+          <p>
+            Nothing streams until the recipient accepts the terms and you start it. You can take
+            everything back before then.
+          </p>
+          <a className="button primary" href={href}>
+            Open stream #{id.toString()}
+          </a>
+        </>
+      ) : (
+        <>
+          <p>
+            One more wallet step pauses the stream so nothing is paid out before the recipient
+            accepts. Until it confirms, the stream is running.
+          </p>
+          <div className="action-row">
+            <TxButton
+              label="Hold the stream"
+              pending={tx.pending}
+              phase={tx.state.phase}
+              onClick={run}
+              primary
+            />
+            <a className="button" href={href}>
+              Skip, leave it running
+            </a>
+          </div>
+          <TxFeedback state={tx.state} />
+        </>
+      )}
     </div>
   );
 }
@@ -126,6 +189,8 @@ type Draft = {
   period: Period;
   /** One payment: how many periods the total is spread over. */
   spanCount: number;
+  /** Pause right after create so nothing streams until the recipient accepts and the client starts it. */
+  hold: boolean;
 };
 
 /** Whole seconds the deposit lasts at this rate. */
@@ -145,12 +210,14 @@ export function Create() {
   const [period, setPeriod] = useState<Period>("day");
   const [spanCount, setSpanCount] = useState("1");
   const [deposit, setDeposit] = useState("");
+  const [hold, setHold] = useState(true);
   const [terms, setTerms] = useState("");
   const [link, setLink] = useState("");
   const [job, setJob] = useState("");
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState<bigint>();
   const [invalid, setInvalid] = useState<{ name: string; message: string }>();
   const fieldError = (name: string) =>
     invalid?.name === name ? invalid.message : undefined;
@@ -265,6 +332,7 @@ export function Create() {
         perPeriod: per,
         period,
         spanCount: span,
+        hold,
       });
       setError("");
       window.scrollTo(0, 0);
@@ -346,6 +414,17 @@ export function Create() {
               </>
             )}
             <div>
+              <dt>Starts</dt>
+              <dd>
+                {draft.hold ? "When they accept and you start it" : "Right away"}
+                <small className="muted">
+                  {draft.hold
+                    ? "The stream is created on hold. Nothing is paid out until the recipient accepts the terms and you start it; you can take everything back before then."
+                    : "Money streams from the moment the stream is created, whether or not the recipient has accepted the terms. What has streamed is theirs to withdraw, even if they never do."}
+                </small>
+              </dd>
+            </div>
+            <div>
               <dt>Terms</dt>
               <dd className="terms-preview">{draft.uri}</dd>
             </div>
@@ -358,12 +437,17 @@ export function Create() {
           </dl>
           <p className="muted">
             The terms are stored with the stream, word for word. Reviewers read
-            exactly this text if there is ever a disagreement. Two wallet
-            steps: allow Weir to take the deposit, then create the stream.
+            exactly this text if there is ever a disagreement.{" "}
+            {draft.hold
+              ? "Three wallet steps: allow Weir to take the deposit, create the stream, then hold it."
+              : "Two wallet steps: allow Weir to take the deposit, then create the stream."}
           </p>
           {draft.token.toLowerCase() === WETH[r.chain.id]?.toLowerCase() && (
             <WrapEth needed={draft.deposit} decimals={token.data.decimals} />
           )}
+          {created !== undefined ? (
+            <HoldStep id={created} />
+          ) : (
           <ApprovalAction
             token={token.data}
             amount={draft.deposit}
@@ -390,6 +474,10 @@ export function Create() {
                   }) as { eventName: string; args: unknown };
                   if (decoded.eventName === "StreamCreated") {
                     const id = (decoded.args as { id: bigint }).id;
+                    if (draft.hold) {
+                      setCreated(id);
+                      return;
+                    }
                     location.hash = `/stream/${id}`;
                     return;
                   }
@@ -400,9 +488,10 @@ export function Create() {
               location.hash = "/streams";
             }}
           />
+          )}
           <button
             className="text-button"
-            disabled={busy}
+            disabled={busy || created !== undefined}
             onClick={() => setDraft(undefined)}
           >
             Go back and change something
@@ -612,6 +701,23 @@ export function Create() {
                 </Field>
               </>
             )}
+            <label className="hold-option">
+              <input
+                type="checkbox"
+                name="hold"
+                checked={hold}
+                onChange={(e) => setHold(e.target.checked)}
+              />
+              <span>
+                <strong>Hold until they accept</strong>
+                <small className="muted">
+                  Nothing streams until the recipient accepts the terms and you start it. Take
+                  everything back any time before then. Without this, money streams from the
+                  moment you create, and what has streamed is theirs even if they never withdraw
+                  it. One extra wallet step.
+                </small>
+              </span>
+            </label>
           </div>
           <div className="form-surface">
             <h2>What for</h2>

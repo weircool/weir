@@ -8,6 +8,12 @@ Decisions and open ideas collected while shipping v2 (2026-10-15). None of these
 - **Tier thresholds float with the token price.** 100,000 / 1M / 10M WEIR are about 0.25 / 2.5 / 25 IMD today, so a small position gets a zero bond. Reset them to match where holders actually sit (the median airdrop is 90,090, just under the first tier), or add a fixed minimum bond in IMD that does not depend on WEIR's price. Any change is a contract change and needs its own audit.
 - **Open question:** how many of the 339 airdrop wallets have actually claimed? The launch record shows no claims.
 
+## Stranded funds: accept gate and reclaim
+Seen on 2026-10-20: a client streamed a small amount to a recipient who then declined to withdraw it. Once streamed, the amount belongs to the recipient alone (`withdraw` is recipient-only, allowed in any state, never expires) and the client has no path back to it. The site now works around this by pausing right after create ("Hold until they accept"), which costs a second transaction and streams for the few seconds in between.
+- **Accept gate (DECIDED as the design, not yet built).** Create a stream in a `Pending` state with no clock. The clock starts at `accept(id)` (or at the recipient's first `withdraw`/`dispute`, which already count as acceptance). The client may `cancel` a pending stream for a full refund. A recipient who never engages never earns anything, and the hold needs no second transaction.
+- **Reclaim after long silence (open).** If a `Closed` stream still has `withdrawable(id) > 0` after a long window (a year), let the client `reclaim(id)`. Covers a recipient who vanishes after the work. Weakens "the recipient keeps what streamed", so keep the window long and show it on every surface.
+- Both are contract changes: size budget (see Contract hygiene) and a new audit apply.
+
 ## Oracle signer
 Keep it immutable. A changeable signer needs an admin who could decide every dispute. If IMD rotates its key, new rulings stop verifying, disputes fall back to expiry and bonds come back, and a redeploy rotates it. The Intake's published `signer()` is its quote-signing key, not the attestation key, so there is no on-chain value to follow.
 

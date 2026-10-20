@@ -124,6 +124,8 @@ function StreamActions({
   const { address } = useAccount();
   const access = permissions(stream, address);
   const gate = useReady();
+  // Active but paused: either a client pause or a stream created on hold until the recipient accepts.
+  const held = stream.state === 1 && stream.rate === 0n;
   const [depositInput, setDepositInput] = useState("");
   const [rate, setRate] = useState("");
   const [refund, setRefund] = useState("");
@@ -148,6 +150,28 @@ function StreamActions({
           {access.client && (
             <section className="controls-section">
               <h2>You are the client</h2>
+              {held && acceptedAt === 0n && (
+                <Notice>
+                  On hold. Nothing streams until you start it. The recipient has
+                  not accepted the terms yet; once they do, start the stream here.
+                  Until then you can take everything back.
+                </Notice>
+              )}
+              {held && acceptedAt > 0n && stream.pausedRate > 0n && (
+                <section className="notice hold-start">
+                  <h3>The recipient accepted the terms</h3>
+                  <p>
+                    Start streaming at the saved rate of{" "}
+                    {units(stream.pausedRate * 86400n, token.decimals)} {token.symbol}{" "}
+                    per day. Nothing is paid out until you do.
+                  </p>
+                  <Action
+                    name="restart"
+                    args={[id, stream.pausedRate]}
+                    label="Start streaming"
+                  />
+                </section>
+              )}
               <div className="controls-grid">
                 {access.deposit && (
                   <section>
@@ -266,6 +290,12 @@ function StreamActions({
           {access.recipient && (
             <section className="controls-section">
               <h2>You are the recipient</h2>
+              {held && acceptedAt === 0n && (
+                <Notice>
+                  The client is holding this stream until you accept the terms.
+                  Nothing streams yet. Accept below and they can start it.
+                </Notice>
+              )}
               {acceptedAt === 0n && stream.state === 1 && (
                 <section className="terms-preview">
                   <h3>Read this before you accept or withdraw</h3>

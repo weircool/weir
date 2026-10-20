@@ -1418,3 +1418,13 @@ h1 { font-size: 2.1rem; }
 .mode-toggle button.selected { background: var(--px-yellow); }
 .field-warning { color: var(--px-brick); display: block; font-size: var(--text-small); }
 @media (max-width: 640px) { .mode-toggle { grid-template-columns: 1fr; } }
+
+/* Create: hold-until-accept option and the post-create hold step. */
+.hold-option { display: flex; gap: 12px; align-items: flex-start; margin-block-start: 4px; }
+.hold-option input { margin-block-start: 4px; flex: none; }
+.hold-option span { display: grid; gap: 4px; }
+.hold-step { display: grid; gap: 12px; }
+.hold-step h3 { margin: 0; }
+.hold-step p { margin: 0; }
+.hold-start { display: grid; gap: 8px; margin-block-end: 16px; }
+.hold-start h3, .hold-start p { margin: 0; }
