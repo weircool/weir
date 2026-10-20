@@ -128,11 +128,20 @@ function StreamActions({
   const held = stream.state === 1 && stream.rate === 0n;
   const [depositInput, setDepositInput] = useState("");
   const [rate, setRate] = useState("");
+  const [ratePeriod, setRatePeriod] = useState<"day" | "week">("day");
   const [refund, setRefund] = useState("");
   const [withdraw, setWithdraw] = useState("");
   const [depositBusy, setDepositBusy] = useState(false);
   const depositAmount = tryAmount(depositInput, token.decimals);
-  const rateAmount = tryAmount(rate, token.decimals, UINT128_MAX);
+  // The form takes an amount per day or week; the contract stores units per second.
+  const PERIOD = { day: 86400n, week: 604800n } as const;
+  const perPeriod = tryAmount(rate, token.decimals, UINT128_MAX);
+  const rateAmount =
+    perPeriod !== undefined && perPeriod / PERIOD[ratePeriod] > 0n
+      ? perPeriod / PERIOD[ratePeriod]
+      : undefined;
+  const currentRate = stream.rate > 0n ? stream.rate : stream.pausedRate;
+  const perDay = (r: bigint) => `${units(r * 86400n, token.decimals)} ${token.symbol} per day`;
   const refundAmount = tryAmount(refund, token.decimals);
   const withdrawAmount = tryAmount(withdraw, token.decimals);
   const claimable = useRead<bigint>(
@@ -207,25 +216,54 @@ function StreamActions({
                     {access.pause && (
                       <Action name="pause" args={[id]} label="Pause" />
                     )}
+                    <p className="muted">
+                      {stream.rate > 0n
+                        ? `Now ${perDay(stream.rate)}.`
+                        : currentRate > 0n
+                          ? `Saved rate ${perDay(currentRate)}.`
+                          : "No saved rate."}
+                    </p>
                     <Field
-                      label={`New rate per second (${token.symbol})`}
+                      label={`${access.restart ? "Rate" : "New rate"} (${token.symbol})`}
                       hint={
                         rateAmount
-                          ? `${units(rateAmount * 86400n, token.decimals)} ${token.symbol} per day`
-                          : "The new rate applies after confirmation."
+                          ? `${units(rateAmount, token.decimals)} ${token.symbol} every second, rounded down to the smallest unit. ${perDay(rateAmount)}.`
+                          : perPeriod
+                            ? `That is less than the smallest unit of ${token.symbol} per second. Raise the amount.`
+                            : "What they earn each day or each week while the stream runs."
                       }
                     >
-                      <input
-                        inputMode="decimal"
-                        value={rate}
-                        onChange={(e) => setRate(e.target.value)}
-                        placeholder="Amount per second"
-                      />
+                      <div className="amount-row">
+                        <input
+                          inputMode="decimal"
+                          value={rate}
+                          onChange={(e) => setRate(e.target.value)}
+                          placeholder={
+                            currentRate > 0n
+                              ? units(currentRate * PERIOD[ratePeriod], token.decimals)
+                              : "Amount"
+                          }
+                        />
+                        <div className="period-toggle" role="radiogroup" aria-label="Per">
+                          {(["day", "week"] as const).map((p) => (
+                            <button
+                              type="button"
+                              key={p}
+                              role="radio"
+                              aria-checked={ratePeriod === p}
+                              className={ratePeriod === p ? "selected" : ""}
+                              onClick={() => setRatePeriod(p)}
+                            >
+                              per {p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </Field>
                     <Action
                       name={access.restart ? "restart" : "adjust"}
                       args={[id, rateAmount ?? 0n]}
-                      label={access.restart ? "Restart stream" : "Adjust rate"}
+                      label={access.restart ? "Restart at this rate" : "Change the rate"}
                       disabled={!rateAmount}
                     />
                   </section>

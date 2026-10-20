@@ -360,15 +360,17 @@ await scenario(
     await open(page, "/stream/1");
     await connect(page);
     await expect(
-      page.getByRole("button", { name: "Pause stream", exact: true }),
+      page.getByRole("button", { name: "Pause", exact: true }),
     ).toBeEnabled();
-    await action(page, "Pause stream");
+    await action(page, "Pause");
     expect(state.streams.get(1n).rate).toBe(0n);
-    await page.getByLabel("New rate per second (USDC)").fill("0.000020");
-    await action(page, "Restart stream");
+    // Rates are entered per day or week; 1.728 USDC/day is 20 units/second.
+    await page.getByLabel("Rate (USDC)").fill("1.728");
+    await action(page, "Restart at this rate");
     expect(state.streams.get(1n).rate).toBe(20n);
-    await page.getByLabel("New rate per second (USDC)").fill("0.000030");
-    await action(page, "Adjust rate");
+    await page.getByLabel("New rate (USDC)").fill("18.144");
+    await page.getByRole("radio", { name: "per week" }).click();
+    await action(page, "Change the rate");
     expect(state.streams.get(1n).rate).toBe(30n);
     await page.getByLabel("Deposit (USDC)").fill("5");
     await action(page, "Approve USDC");
@@ -381,8 +383,8 @@ await scenario(
     await action(page, "Refund amount");
     await action(page, "Refund max", true);
     expect(state.streams.get(1n).balance).toBe(20000000n);
-    await action(page, "Void stream", true);
-    await expect(page.locator(".title-row .badge")).toHaveText("Closed");
+    await action(page, "Stop and take back the rest", true);
+    await expect(page.locator(".badge")).toHaveText("Closed");
   },
 );
 await scenario(
