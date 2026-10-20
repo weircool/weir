@@ -8,7 +8,77 @@ Decisions and open ideas collected while shipping v2 (2026-10-15). None of these
 - **Tier thresholds float with the token price.** 100,000 / 1M / 10M WEIR are about 0.25 / 2.5 / 25 IMD today, so a small position gets a zero bond. Reset them to match where holders actually sit (the median airdrop is 90,090, just under the first tier), or add a fixed minimum bond in IMD that does not depend on WEIR's price. Any change is a contract change and needs its own audit.
 - **Open question:** how many of the 339 airdrop wallets have actually claimed? The launch record shows no claims.
 
-## Stranded funds: accept gate and reclaim
+## v3 design: locked escrow with a jury (owner, 2026-10-20)
+
+Decided direction for the next contract, replacing the "Stranded funds" notes below (kept for the record). Prompted by two things seen on v2 in October: a recipient who never withdrew stranded the streamed part, and the realisation that a client can `void` at any moment, so a recipient has no claim on anything not yet streamed and no dispute path once the client has left. v2 protects the client; v3 protects both.
+
+Principle: funds lock only when both parties have signed. Once locked, each side may give money away alone (client releases, recipient refunds), nobody may take it back alone, and the panel decides anything contested. Silence rules stop either side holding the other hostage without paying for a panel.
+
+### Two modes, one state machine
+
+- **Milestone.** A fixed pot for one deliverable with a deadline. Released whole. A job with several parts is several milestones.
+- **Stream.** The pot pays out per second from the moment it locks, as v2 does, for retainers and hourly work. The difference from v2: after the lock the client cannot pause, refund or void. Exit is by dispute, and a rejected ruling returns only the unstreamed part.
+
+States: `Pending → Locked → (Delivered) → Disputed → Ruled → Closed`, with `Closed` reachable from `Pending`, `Locked` and `Delivered` as listed below.
+
+### Pending (client funded, recipient has not signed)
+- `create(recipient, token, amount, mode, rate, deadline, termsHash, termsURI, imdJobId)`: client funds the whole pot. No clock in either mode. Replaces today's create-then-pause hold, which costs a second transaction and streams for the seconds in between.
+- `cancel(id)` by the client: full refund, `Closed`. The only exit; the recipient has signed nothing.
+- `accept(id)` by the recipient: `Locked`. The stream clock, if any, starts here. Records count from here, as in v2.
+- Open: should a `Pending` stream expire on its own (say 30 days) so an abandoned offer returns to the client without a transaction? Cheap to add; decide at implementation.
+
+### Locked (both signed)
+- `release(id)` by the client: 100% of what remains to the recipient, `Closed`. One signature; it only hurts the signer.
+- `refund(id)` by the recipient: 100% of what remains to the client, `Closed`. Same logic, the recipient backing out.
+- `deposit(id)` by the client: top up (stream mode mainly). Allowed; it only adds to what the recipient may earn.
+- Stream mode only: `withdraw` by the recipient of what has streamed, any time, any state, as in v2.
+- `deliver(id)` by the recipient: marks the work handed over, `Delivered`, starts the client's response window. Milestone mode needs it; in stream mode it is optional and only matters for the silence rule.
+- No `pause`, `adjust`, `void` or client `refund` after the lock. Changing the rate is a new stream.
+- `dispute(id, note, maxBond)` by either party, as in v2: bond, oracle fee, panel of five, quorum four, same question. `Disputed` freezes the stream clock.
+
+### Delivered (recipient says it is done)
+- Client has `responseWindow` (7 days) to `release` or `dispute`.
+- After the window, `claim(id)` by the recipient (or anyone) pays the recipient 100% of what remains, `Closed`. Silence after delivery pays the worker.
+
+### Silence the other way (client protection)
+- Milestone mode: if `deadline + graceWindow` (7 days) passes with no `deliver` and no dispute, `reclaim(id)` by the client (or anyone) returns 100% of what remains, `Closed`. Silence past the deadline refunds the client.
+- Stream mode: the deadline is optional; when set, the same rule returns the unstreamed part.
+- A recipient who is late but working must `deliver` (even partially, with a note in the evidence room) or `dispute` before the grace window ends. Both windows are long enough that the other side can always dispute first.
+
+### Rulings
+- Delivered: 100% of what remains to the recipient, `Closed`. (Stream mode: the clock does not restart; the pot is paid out. Keeping v2's "restart at the paused rate" adds states for no gain once release is one click.)
+- Not delivered: 100% of what remains to the client, `Closed`. Stream mode: streamed-so-far stays the recipient's; the panel cannot claw back what was already earned by the clock.
+- Panel failure or `disputeTimeout` (7 days): back to the state before the dispute, bond returned, as in v2. The response and grace windows are paused while a dispute is open.
+- The question stays bool with the v2 template; the panel decides the whole remaining pot one way. No split rulings (`answerType` is bool and splits invite horse-trading). Granularity comes from milestones.
+
+### Bonds and fees
+- Bond = remaining pot × tier bps, same tiers as v2 (revisit thresholds per "Hold gate and bond tiers" above). In milestone mode the whole pot is at stake, so bonds are larger in absolute terms than on a half-streamed v2 stream; the tier table may want a lower top rate (2.5% instead of 5%).
+- Oracle fee and court fund unchanged.
+- Loser's bond to the winner, as in v2.
+
+### Windows and constants
+| name | value | purpose |
+| --- | --- | --- |
+| `responseWindow` | 7 days | client's time to release or dispute after `deliver` |
+| `graceWindow` | 7 days | after the deadline, before the client may `reclaim` |
+| `disputeTimeout` | 7 days | as v2 |
+| `pendingExpiry` | 30 days, open | optional self-expiry of an unaccepted offer |
+
+All immutable constructor arguments, as in v2. No owner, no admin, no upgrade path.
+
+### Site
+- Create: a Milestone / Stream toggle. Milestone asks for amount, deadline, terms. Stream asks for rate, deposit, optional deadline. Both say in plain words what locks and when it can come back.
+- Stream page per state: Pending shows "waiting for them to accept" with cancel; Locked shows release / refund / deliver / dispute; Delivered shows the client's countdown; after windows, the one-click claim or reclaim.
+- Evidence room per stream (see the dispute notes in PRODUCT.md): deliver and dispute both link to it. Decide after the 0.5 IMD test whether the panel opens links.
+- Terms template on Create: deliverable, due date, acceptance criteria, link to the spec.
+
+### Costs and sequencing
+- New contract, not an edit: v2 is 43 bytes under the size cap. Drop `pause`/`adjust`/`restart` and the paused-rate bookkeeping to make room for `deliver`/`claim`/`reclaim`/`release`.
+- Needs its own audit and the hostile-token tests from "Contract hygiene".
+- Before writing Solidity: run one throwaway dispute on v2 with a link in the note to confirm the panel reads off-chain evidence (open item in WEIR-PLAN.md). If it does not, the ruling step needs IMD-side work first.
+- v2 streams stay on v2; the site must keep reading both contracts.
+
+## Stranded funds: accept gate and reclaim (superseded by the v3 design above)
 Seen on 2026-10-20: a client streamed a small amount to a recipient who then declined to withdraw it. Once streamed, the amount belongs to the recipient alone (`withdraw` is recipient-only, allowed in any state, never expires) and the client has no path back to it. The site now works around this by pausing right after create ("Hold until they accept"), which costs a second transaction and streams for the few seconds in between.
 - **Accept gate (DECIDED as the design, not yet built).** Create a stream in a `Pending` state with no clock. The clock starts at `accept(id)` (or at the recipient's first `withdraw`/`dispute`, which already count as acceptance). The client may `cancel` a pending stream for a full refund. A recipient who never engages never earns anything, and the hold needs no second transaction.
 - **Reclaim after long silence (open).** If a `Closed` stream still has `withdrawable(id) > 0` after a long window (a year), let the client `reclaim(id)`. Covers a recipient who vanishes after the work. Weakens "the recipient keeps what streamed", so keep the window long and show it on every surface.
