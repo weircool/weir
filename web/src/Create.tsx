@@ -88,23 +88,60 @@ function WrapEth({ needed, decimals }: { needed: bigint; decimals: number }) {
  * Pauses a freshly created stream so nothing streams until the recipient accepts the terms and the
  * client starts it. The contract has no "create paused", so this is a second transaction right after
  * create; the few seconds in between stream at the full rate (fractions of a cent at normal rates).
+ *
+ * Public RPC nodes can lag the block that created the stream, so the pause is simulated only once a
+ * node reports the stream as Active and running, and a failed attempt is retried a few times before
+ * the manual button is the only way forward.
  */
 function HoldStep({ id }: { id: bigint }) {
+  const r = useRuntime();
+  const gate = useReady();
   const tx = useTransaction();
   const [done, setDone] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [waiting, setWaiting] = useState(true);
+  // Resolve once the RPC in use sees the stream as Active with a positive rate.
+  const seen = async () => {
+    for (let i = 0; i < 20; i++) {
+      try {
+        const s = (await r.client.readContract({
+          address: r.weir.address,
+          abi: r.weir.abi,
+          functionName: "streams",
+          args: [id],
+        })) as { state: number; rate: bigint };
+        if (s.state === 1 && s.rate > 0n) return true;
+        if (s.state === 1 && s.rate === 0n) return false; // already paused
+      } catch {
+        /* node not caught up or briefly unavailable */
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    return true;
+  };
   const run = async () => {
+    setWaiting(true);
+    const running = await seen();
+    setWaiting(false);
+    if (!running) {
+      setDone(true);
+      return;
+    }
     const receipt = await tx.run("pause", [id]);
     if (receipt) setDone(true);
   };
   useEffect(() => {
+    if (!gate.ready || done || tx.pending) return;
+    if (attempt >= 3) return;
+    setAttempt((n) => n + 1);
     void run();
-    // Run once, when the created stream id is known.
+    // Runs when the wallet is ready, and again after a failed attempt (up to three tries).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [gate.ready, tx.state.phase === "error" ? attempt : -1]);
   const href = `#/stream/${id.toString()}`;
   return (
     <div className="hold-step" role="status">
-      <h3>{done ? "Stream created and on hold" : "Stream created. Holding it…"}</h3>
+      <h3>{done ? "Stream created and on hold" : "Stream created. Pausing it…"}</h3>
       {done ? (
         <>
           <p>
@@ -118,19 +155,25 @@ function HoldStep({ id }: { id: bigint }) {
       ) : (
         <>
           <p>
-            One more wallet step pauses the stream so nothing is paid out before the recipient
-            accepts. Until it confirms, the stream is running.
+            <strong>The stream is running right now.</strong> One more wallet step pauses it so
+            nothing more is paid out before the recipient accepts. Confirm the pause in your wallet
+            when it appears.
           </p>
+          {!gate.ready && <Notice>{gate.reason}</Notice>}
+          {waiting && gate.ready && (
+            <p className="muted">Waiting for the network to confirm the new stream…</p>
+          )}
           <div className="action-row">
             <TxButton
-              label="Hold the stream"
-              pending={tx.pending}
-              phase={tx.state.phase}
+              label="Pause the stream"
+              pending={tx.pending || waiting}
+              phase={waiting ? "checking" : tx.state.phase}
+              disabled={!gate.ready}
               onClick={run}
               primary
             />
             <a className="button" href={href}>
-              Skip, leave it running
+              Leave it running
             </a>
           </div>
           <TxFeedback state={tx.state} />
