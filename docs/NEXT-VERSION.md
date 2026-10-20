@@ -25,7 +25,7 @@ States: `Pending → Locked → (Delivered) → Disputed → Ruled → Closed`, 
 - `create(recipient, token, amount, mode, rate, deadline, termsHash, termsURI, imdJobId)`: client funds the whole pot. No clock in either mode. Replaces today's create-then-pause hold, which costs a second transaction and streams for the seconds in between.
 - `cancel(id)` by the client: full refund, `Closed`. The only exit; the recipient has signed nothing.
 - `accept(id)` by the recipient: `Locked`. The stream clock, if any, starts here. Records count from here, as in v2.
-- Open: should a `Pending` stream expire on its own (say 30 days) so an abandoned offer returns to the client without a transaction? Cheap to add; decide at implementation.
+- DECIDED (owner, 2026-10-20): a `Pending` offer expires after `pendingExpiry` (30 days). After that, `accept` reverts, so a recipient cannot lock a stale offer the client forgot about, and `cancel` may be called by anyone, not only the client, so the pot goes back to the client's wallet even if the client never returns. Before the window the client alone may cancel, as above.
 
 ### Locked (both signed)
 - `release(id)` by the client: 100% of what remains to the recipient, `Closed`. One signature; it only hurts the signer.
@@ -62,7 +62,7 @@ States: `Pending → Locked → (Delivered) → Disputed → Ruled → Closed`, 
 | `responseWindow` | 7 days | client's time to release or dispute after `deliver` |
 | `graceWindow` | 7 days | after the deadline, before the client may `reclaim` |
 | `disputeTimeout` | 7 days | as v2 |
-| `pendingExpiry` | 30 days, open | optional self-expiry of an unaccepted offer |
+| `pendingExpiry` | 30 days | after this, `accept` reverts and anyone may `cancel` the unaccepted offer back to the client |
 
 All immutable constructor arguments, as in v2. No owner, no admin, no upgrade path.
 
