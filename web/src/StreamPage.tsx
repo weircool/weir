@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { zeroHash, type Address } from "viem";
 import {
@@ -19,6 +19,8 @@ import {
   UINT128_MAX,
   units,
   type Stream,
+  clearHoldIntent,
+  holdIntentKey,
 } from "./domain";
 import { Action, ApprovalAction, Claim } from "./actions";
 import { DisputeDialog } from "./Dispute";
@@ -126,6 +128,20 @@ function StreamActions({
   const gate = useReady();
   // Active but paused: either a client pause or a stream created on hold until the recipient accepts.
   const held = stream.state === 1 && stream.rate === 0n;
+  // The client chose "hold until they accept" on this browser, but the pause never confirmed.
+  const [holdMissed, setHoldMissed] = useState(() => {
+    try {
+      return localStorage.getItem(holdIntentKey(id)) !== null;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (holdMissed && held) {
+      clearHoldIntent(id);
+      setHoldMissed(false);
+    }
+  }, [holdMissed, held, id]);
   const [depositInput, setDepositInput] = useState("");
   const [rate, setRate] = useState("");
   const [ratePeriod, setRatePeriod] = useState<"day" | "week">("day");
@@ -159,6 +175,18 @@ function StreamActions({
           {access.client && (
             <section className="controls-section">
               <h2>You are the client</h2>
+              {holdMissed && stream.state === 1 && stream.rate > 0n && (
+                <section className="notice error hold-start" role="alert">
+                  <h3>Not on hold: this stream is paying out</h3>
+                  <p>
+                    You chose to hold it until the recipient accepts, but the pause was never
+                    confirmed. It is streaming {perDay(stream.rate)} right now
+                    {acceptedAt === 0n ? ", and they have not accepted the terms yet" : ""}.
+                    Pause it to put it on hold; start it again once they accept.
+                  </p>
+                  <Action name="pause" args={[id]} label="Pause the stream" />
+                </section>
+              )}
               {held && acceptedAt === 0n && (
                 <Notice>
                   On hold. Nothing streams until you start it. The recipient has

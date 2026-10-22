@@ -28,6 +28,8 @@ import {
   tryAmount,
   UINT128_MAX,
   units,
+  clearHoldIntent,
+  markHoldIntent,
 } from "./domain";
 import { ApprovalAction } from "./actions";
 import { Eligibility } from "./Home";
@@ -125,10 +127,14 @@ function HoldStep({ id }: { id: bigint }) {
     setWaiting(false);
     if (!running) {
       setDone(true);
+      clearHoldIntent(id);
       return;
     }
     const receipt = await tx.run("pause", [id]);
-    if (receipt) setDone(true);
+    if (receipt) {
+      setDone(true);
+      clearHoldIntent(id);
+    }
   };
   useEffect(() => {
     if (!gate.ready || done || tx.pending) return;
@@ -141,7 +147,12 @@ function HoldStep({ id }: { id: bigint }) {
   const href = `#/stream/${id.toString()}`;
   return (
     <div className="hold-step" role="status">
-      <h3>{done ? "Stream created and on hold" : "Stream created. Pausing it…"}</h3>
+      <ol className="steps" aria-label="Create stream steps">
+        <li className="done">✓ Approve</li>
+        <li className="done">✓ Create stream</li>
+        <li className={done ? "done" : "current"}>{done ? "✓" : "3"} Hold the stream</li>
+      </ol>
+      <h3>{done ? "Stream created and on hold" : "Step 3 of 3: it is not on hold yet"}</h3>
       {done ? (
         <>
           <p>
@@ -154,11 +165,11 @@ function HoldStep({ id }: { id: bigint }) {
         </>
       ) : (
         <>
-          <p>
-            <strong>The stream is running right now.</strong> One more wallet step pauses it so
-            nothing more is paid out before the recipient accepts. Confirm the pause in your wallet
-            when it appears.
-          </p>
+          <Notice error>
+            <strong>The stream is running and paying out right now.</strong> One more signature
+            pauses it. Stay on this page and confirm the pause in your wallet when it appears; it
+            can take up to a minute to show. Every second until then is paid to the recipient.
+          </Notice>
           {!gate.ready && <Notice>{gate.reason}</Notice>}
           {waiting && gate.ready && (
             <p className="muted">Waiting for the network to confirm the new stream…</p>
@@ -172,8 +183,8 @@ function HoldStep({ id }: { id: bigint }) {
               onClick={run}
               primary
             />
-            <a className="button" href={href}>
-              Leave it running
+            <a className="button" href={href} onClick={() => clearHoldIntent(id)}>
+              Skip and leave it running
             </a>
           </div>
           <TxFeedback state={tx.state} />
@@ -480,11 +491,20 @@ export function Create() {
           </dl>
           <p className="muted">
             The terms are stored with the stream, word for word. Reviewers read
-            exactly this text if there is ever a disagreement.{" "}
-            {draft.hold
-              ? "Three wallet steps: allow Weir to take the deposit, create the stream, then hold it."
-              : "Two wallet steps: allow Weir to take the deposit, then create the stream."}
+            exactly this text if there is ever a disagreement.
           </p>
+          {draft.hold ? (
+            <Notice>
+              <strong>Three wallet signatures, not two.</strong> 1 allow the deposit, 2 create
+              the stream, 3 hold it. The stream starts paying out the moment step 2 confirms;
+              step 3 pauses it. Stay on this page until the third signature is confirmed.
+            </Notice>
+          ) : (
+            <Notice>
+              <strong>Two wallet signatures.</strong> 1 allow the deposit, 2 create the stream.
+              Money streams from the moment step 2 confirms.
+            </Notice>
+          )}
           {draft.token.toLowerCase() === WETH[r.chain.id]?.toLowerCase() && (
             <WrapEth needed={draft.deposit} decimals={token.data.decimals} />
           )}
@@ -505,6 +525,7 @@ export function Create() {
               draft.job,
             ]}
             label="Create stream"
+            after={draft.hold ? ["Hold the stream"] : []}
             disabled={!eligible.data || eligible.isError}
             onBusy={setBusy}
             onDone={(receipt) => {
@@ -518,6 +539,7 @@ export function Create() {
                   if (decoded.eventName === "StreamCreated") {
                     const id = (decoded.args as { id: bigint }).id;
                     if (draft.hold) {
+                      markHoldIntent(id);
                       setCreated(id);
                       return;
                     }

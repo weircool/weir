@@ -22,6 +22,7 @@ export function ApprovalAction({
   onDone,
   onBusy,
   preflight,
+  after = [],
 }: {
   token: Token;
   amount: bigint;
@@ -32,6 +33,8 @@ export function ApprovalAction({
   onDone?: (receipt: TransactionReceipt) => void;
   onBusy?: (busy: boolean) => void;
   preflight?: () => Promise<void>;
+  /** Wallet steps that follow this action, shown in the step list so nobody leaves early. */
+  after?: string[];
 }) {
   const r = useRuntime();
   const gate = useReady();
@@ -59,6 +62,11 @@ export function ApprovalAction({
           {approved ? "✓" : "1"} Approve {token.symbol}
         </li>
         <li className={approved ? "current" : ""}>2 {label}</li>
+        {after.map((step, i) => (
+          <li key={step}>
+            {i + 3} {step}
+          </li>
+        ))}
       </ol>
       <p className="muted">
         Allow Weir to spend {units(amount, token.decimals)} {token.symbol}.

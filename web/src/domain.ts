@@ -244,3 +244,23 @@ export function describeDuration(seconds: bigint): string {
   }
   return "under a minute";
 }
+
+/**
+ * The client asked for "hold until they accept" but the pause has not confirmed. The stream page
+ * reads this to warn while the stream is still running. Per browser; a best-effort reminder only.
+ */
+export const holdIntentKey = (id: bigint) => `weir:hold-intent:${id.toString()}`;
+export function clearHoldIntent(id: bigint) {
+  try {
+    localStorage.removeItem(holdIntentKey(id));
+  } catch {
+    /* storage unavailable */
+  }
+}
+export function markHoldIntent(id: bigint) {
+  try {
+    localStorage.setItem(holdIntentKey(id), "1");
+  } catch {
+    /* storage unavailable */
+  }
+}
